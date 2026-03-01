@@ -16,7 +16,7 @@ export default function Home() {
   const { auth, kv } = usePuterStore();
   const navigate = useNavigate();
   const [resumes, setResumes] = useState<Resume[]>([]);
-  const [loadingResumes, setLoadingResumes] = useState(false);
+  const [loadingResumes, setLoadingResumes] = useState(true);
 
   useEffect(() => {
     if (!auth.isAuthenticated) {
@@ -25,19 +25,38 @@ export default function Home() {
   }, [auth.isAuthenticated]);
 
   useEffect(() => {
+    let cancelled = false;
     const loadResumes = async () => {
       setLoadingResumes(true);
+      try {
+        const resumes = (await kv.list("resume:*", true)) as KVItem[];
 
-      const resumes = (await kv.list("resume:*", true)) as KVItem[];
+        const parsedResumes = resumes
+          ?.map((resume) => {
+            try {
+              return JSON.parse(resume.value) as Resume;
+            } catch (e) {
+              return null;
+            }
+          })
+          .filter((r): r is Resume => r !== null);
 
-      const parsedResumes = resumes?.map(
-        (resume) => JSON.parse(resume.value) as Resume,
-      );
-
-      setResumes(parsedResumes || []);
-      setLoadingResumes(false);
+        if (!cancelled) {
+          setResumes(parsedResumes);
+        }
+      } catch (err) {
+        console.error("Failed to load resumes", err);
+      } finally {
+        if (!cancelled) {
+          setLoadingResumes(false);
+        }
+      }
     };
-  }, []);
+    loadResumes();
+    return () => {
+      cancelled = true;
+    };
+  }, [kv]);
 
   return (
     <main className="bg-[url('/images/bg-main.svg')] bg-cover">
